@@ -1,0 +1,11 @@
+Lock = Overlap of unprofitable positions at the expense of the profit of others
+
+In this mode, the EA finds the most unprofitable long/short positions and tries to close them at the expense of the profit of other open positions. The overlap occurs on a counter, so in this case we also win a part of the spread.Buy Sell – choose which positions we are trying to close
+
+The EA will close a long order and all profit orders if its loss is covered by profit orders plus CloseProfit in the name of the deposit.
+
+Remote order is determined by the distance from the current price to the order.
+
+Example:
+
+We have 20 positions open, of which 3 are in profit and 17 are in loss. The loss of the farthest order is 5 USD and the profit of all (3) profitable orders is 6 USD. If CloseProfit = 1 usd (5=6-1), then we will close long-term unprofitable and all profitable ones on the current currency pair. Next, the Expert Advisor again determines a pair of unprofitable ones and waits for the profit from new orders to continue working.

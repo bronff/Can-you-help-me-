@@ -1,0 +1,302 @@
+// MQL4 Kód na detekciu pullbacku
+int start() {
+   double maCurrent = iMA(NULL, 0, 50, 0, MODE_SMA, PRICE_CLOSE, 0); // 50-perióda SMA
+   double maPrevious = iMA(NULL, 0, 50, 0, MODE_SMA, PRICE_CLOSE, 1); // SMA predchádzajúcej sviečky
+
+   // Detekcia pullbacku pre dlhé pozície
+   if (Close[1] > maPrevious && Close[0] < maCurrent) {
+      // Pullback nahor
+      Print("Detekovaný pullback nahor");
+   }
+
+   // Detekcia pullbacku pre krátke pozície
+   if (Close[1] < maPrevious && Close[0] > maCurrent) {
+      // Pullback nadol
+      Print("Detekovaný pullback nadol");
+   }
+
+   return(0);
+}
+---------------------------------------------------------------------------------------------------------
+
+kód pre šípky, ktoré budú znázorňovať pullbacky nad a pod aktuálnou cenou
+
+// MQL4 Kód na detekciu pullbacku s vizuálnymi šípkami
+int start() {
+   double maCurrent = iMA(NULL, 0, 50, 0, MODE_SMA, PRICE_CLOSE, 0); // 50-perióda SMA
+   double maPrevious = iMA(NULL, 0, 50, 0, MODE_SMA, PRICE_CLOSE, 1); // SMA predchádzajúcej sviečky
+
+   // Detekcia pullbacku pre dlhé pozície
+   if (Close[1] > maPrevious && Close[0] < maCurrent) {
+      // Pullback nahor
+      Print("Detekovaný pullback nahor");
+      // Vykreslenie šípky nahor
+      ObjectCreate("ArrowUp", OBJ_ARROW, 0, Time[0], Low[0] - (Point * 10));
+      ObjectSet("ArrowUp", OBJPROP_COLOR, Lime);
+   }
+
+   // Detekcia pullbacku pre krátke pozície
+   if (Close[1] < maPrevious && Close[0] > maCurrent) {
+      // Pullback nadol
+      Print("Detekovaný pullback nadol");
+      // Vykreslenie šípky nadol
+      ObjectCreate("ArrowDown", OBJ_ARROW, 0, Time[0], High[0] + (Point * 10));
+      ObjectSet("ArrowDown", OBJPROP_COLOR, Red);
+   }
+
+   return(0);
+}
+-------------------------------------------------------------------------------------------------------------------
+zisťovanie pullbacku s použitím kĺzavého priemeru (SMA) a Stochastic indikátora na určenie trendu. Taktiež pridám logiku na detekciu pullbackov, ktoré môžu tvoriť viac sviečok
+
+//+------------------------------------------------------------------+
+//|                                                   PullbackDetector.mq4 |
+//|                        Copyright 2024, Copilot |
+//|                                                                  |
+//+------------------------------------------------------------------+
+#property strict
+#property indicator_chart_window
+#property indicator_buffers 2
+#property indicator_color1 Lime
+#property indicator_color2 Red
+
+//--- input parameters
+extern int MA_Period = 50;
+extern int Stochastic_Period = 14;
+extern double Overbought_Level = 80.0;
+extern double Oversold_Level = 20.0;
+extern int Pullback_Bars = 3; // Počet sviečok pre identifikáciu pullbacku
+
+//--- buffers
+double UpArrowBuffer[];
+double DownArrowBuffer[];
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   SetIndexStyle(0, DRAW_ARROW);
+   SetIndexArrow(0, 233); // Symbol šípky nahor
+   SetIndexBuffer(0, UpArrowBuffer);
+   
+   SetIndexStyle(1, DRAW_ARROW);
+   SetIndexArrow(1, 234); // Symbol šípky nadol
+   SetIndexBuffer(1, DownArrowBuffer);
+   
+   ArraySetAsSeries(UpArrowBuffer, true);
+   ArraySetAsSeries(DownArrowBuffer, true);
+   
+   return(INIT_SUCCEEDED);
+  }
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+  {
+   int begin = MA_Period + Stochastic_Period + Pullback_Bars;
+   if(rates_total < begin) return(0);
+   
+   for(int i = prev_calculated - 1; i < rates_total - begin; i++)
+     {
+      double maCurrent = iMA(NULL, 0, MA_Period, 0, MODE_SMA, PRICE_CLOSE, i);
+      double stochasticCurrent = iStochastic(NULL, 0, Stochastic_Period, 3, 3, MODE_SMA, 0, MODE_MAIN, i);
+      
+      // Detekcia uptrendu
+      if(close[i] > maCurrent && stochasticCurrent > Oversold_Level && stochasticCurrent < Overbought_Level)
+        {
+         bool isPullback = true;
+         for(int j = 1; j <= Pullback_Bars; j++)
+           {
+            if(close[i+j] > close[i+j-1])
+              {
+               isPullback = false;
+               break;
+              }
+           }
+         if(isPullback)
+           {
+            UpArrowBuffer[i] = low[i] - (4 * Point);
+           }
+        }
+      
+      // Detekcia downtrendu
+      if(close[i] < maCurrent && stochasticCurrent < Overbought_Level && stochasticCurrent > Oversold_Level)
+        {
+         bool isPullback = true;
+         for(int j = 1; j <= Pullback_Bars; j++)
+           {
+            if(close[i+j] < close[i+j-1])
+              {
+               isPullback = false;
+               break;
+              }
+           }
+         if(isPullback)
+           {
+            DownArrowBuffer[i] = high[i] + (4 * Point);
+           }
+        }
+     }
+   
+   return(rates_total);
+  }
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+Tento kód predpokladá, že máte k dispozícii indikátor VQ ako samostatný indikátor v MT4, ktorý je uložený pod názvom “VQ”. Funkcia iCustom sa používa na získanie hodnôt VQ indikátora. Pullback je potvrdený, ak hodnota VQ prekročí určený prah (VQ_Threshold), čo naznačuje, že aktuálna volatilita je kvalitná a môže byť súčasťou silného trendu.
+
+//+------------------------------------------------------------------+
+//|                                                   PullbackDetectorVQ.mq4 |
+//|                        Copyright 2024, Copilot |
+//|                                                                  |
+//+------------------------------------------------------------------+
+#property strict
+#property indicator_chart_window
+#property indicator_buffers 3
+#property indicator_color1 Lime
+#property indicator_color2 Red
+#property indicator_color3 Orange
+
+//--- input parameters
+extern int MA_Period = 50;
+extern int VQ_Length = 9; // Dĺžka pre VQ indikátor
+extern double VQ_Threshold = 0.0005; // Práh pre VQ indikátor
+
+//--- buffers
+double UpArrowBuffer[];
+double DownArrowBuffer[];
+double VQBuffer[];
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   SetIndexStyle(0, DRAW_ARROW);
+   SetIndexArrow(0, 233); // Symbol šípky nahor
+   SetIndexBuffer(0, UpArrowBuffer);
+   
+   SetIndexStyle(1, DRAW_ARROW);
+   SetIndexArrow(1, 234); // Symbol šípky nadol
+   SetIndexBuffer(1, DownArrowBuffer);
+   
+   SetIndexBuffer(2, VQBuffer); // Buffer pre VQ indikátor
+   
+   ArraySetAsSeries(UpArrowBuffer, true);
+   ArraySetAsSeries(DownArrowBuffer, true);
+   ArraySetAsSeries(VQBuffer, true);
+   
+   return(INIT_SUCCEEDED);
+  }
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+  {
+   int begin = MathMax(MA_Period, VQ_Length);
+   if(rates_total < begin) return(0);
+   
+   for(int i = prev_calculated - 1; i < rates_total - begin; i++)
+     {
+      double maCurrent = iMA(NULL, 0, MA_Period, 0, MODE_SMA, PRICE_CLOSE, i);
+      double vqCurrent = iCustom(NULL, 0, "VQ", VQ_Length, 0, i);
+      
+      // Potvrdenie pullbacku pomocou VQ indikátora
+      if(vqCurrent > VQ_Threshold)
+        {
+         // Detekcia pullbacku pre dlhé pozície
+         if(close[i] < maCurrent && close[i+1] > maCurrent)
+           {
+            UpArrowBuffer[i] = low[i] - (4 * Point);
+           }
+         // Detekcia pullbacku pre krátke pozície
+         else if(close[i] > maCurrent && close[i+1] < maCurrent)
+           {
+            DownArrowBuffer[i] = high[i] + (4 * Point);
+           }
+        }
+      
+      // VQBuffer sa používa na zobrazenie hodnoty VQ indikátora
+      VQBuffer[i] = vqCurrent;
+     }
+   
+   return(rates_total);
+  }
+//+------------------------------------------------------------------+
+
+Namiesto pevne stanoveného počtu sviečok môže indikátor VQ pomôcť identifikovať pullbacky na základe zmeny volatility. Napríklad, ak indikátor VQ ukazuje nízku kvalitu volatility, môže to naznačovať, že trh je v bočnom pohybe a nie v pravom pullbacku. Naopak, ak VQ ukazuje vysokú kvalitu volatility, môže to byť signálom silného trendu a pravdepodobného pullbacku.
+
+
+
+// ... [Predchádzajúci kód]
+
+int OnCalculate(const int rates_total,
+                // ... [Ostatné parametre]
+                ) {
+   // ... [Predchádzajúci kód]
+
+   for(int i = prev_calculated - 1; i < rates_total - begin; i++) {
+      double maCurrent = iMA(NULL, 0, MA_Period, 0, MODE_SMA, PRICE_CLOSE, i);
+      double vqCurrent = iCustom(NULL, 0, "VQ", VQ_Length, 0, i);
+
+      // Dynamické určenie počtu sviečok v pullbacku na základe VQ
+      int dynamicPullbackCandles = CalculateDynamicPullbackCandles(vqCurrent);
+
+      // Detekcia pullbacku pre dlhé pozície
+      if(IsPullbackUp(close, maCurrent, i, dynamicPullbackCandles)) {
+         UpArrowBuffer[i] = low[i] - (4 * Point);
+      }
+
+      // Detekcia pullbacku pre krátke pozície
+      if(IsPullbackDown(close, maCurrent, i, dynamicPullbackCandles)) {
+         DownArrowBuffer[i] = high[i] + (4 * Point);
+      }
+   }
+
+   return(rates_total);
+}
+
+// Funkcia na výpočet dynamického počtu sviečok pre pullback
+int CalculateDynamicPullbackCandles(double vqCurrent) {
+   if(vqCurrent < VQ_Threshold) {
+      return 1; // Nižšia volatilita, menší počet sviečok
+   } else if(vqCurrent < VQ_Threshold * 2) {
+      return 2; // Stredná volatilita, stredný počet sviečok
+   } else {
+      return 3; // Vyššia volatilita, väčší počet sviečok
+   }
+}
+
+// Funkcie na detekciu pullbacku nahor a nadol
+bool IsPullbackUp(double &close[], double maCurrent, int index, int pullbackCandles) {
+   // ... [Logika pre detekciu pullbacku nahor]
+}
+
+bool IsPullbackDown(double &close[], double maCurrent, int index, int pullbackCandles) {
+   // ... [Logika pre detekciu pullbacku nadol]
+}
+
+// ... [Zvyšok kódu]
+
+
+Tento prístup umožňuje indikátoru prispôsobiť počet sviečok pre pullback na základe aktuálnej volatility meranej indikátorom VQ. Funkcia CalculateDynamicPullbackCandles určuje počet sviečok na základe hodnoty VQ, a funkcie IsPullbackUp a IsPullbackDown potom používajú tento počet pri detekcii pullbackov.
+
+//+------------------------------------------------------------------+
